@@ -168,37 +168,37 @@ function fetchLivePrices(tickers){
   var unique = [], seen = {};
   tickers.forEach(function(t){ if(!seen[t]){ seen[t]=1; unique.push(t); }});
 
-  // Indian Stock Market API - free, no key, CORS enabled, NSE native
+  // Indian Stock Market API by 0xramm - free, no key, CORS enabled
+  // Response: {status:"success", data:{last_price, percent_change, change, ...}}
   var BASE = "https://indian-stock-market-api.vercel.app";
 
-  // Fetch all tickers in parallel
   var promises = unique.map(function(ticker){
     var url = BASE + "/stock?symbol=" + ticker + "&res=num";
     return fetch(url)
       .then(function(r){ return r.json(); })
       .then(function(data){
-        // Response: {status, data: {last_price, percent_change, change, ...}}
-        if(data.status !== "success") throw new Error("no data");
+        if(data.status !== "success" || !data.data) throw new Error("no data");
         var d = data.data;
-        return {
-          ticker: ticker,
-          res: {
-            price: parseFloat(d.last_price),
-            dayChangePct: d.percent_change != null ? parseFloat(parseFloat(d.percent_change).toFixed(2)) : null
-          }
-        };
+        var price = d.last_price;
+        var chg = d.percent_change;
+        if(!price) throw new Error("no price");
+        return {ticker:ticker, res:{
+          price: parseFloat(price),
+          dayChangePct: chg != null ? parseFloat(parseFloat(chg).toFixed(2)) : null
+        }};
       })
       .catch(function(){
-        // Fallback: try alternate endpoint
-        var url2 = "https://indian-stock-market-api2.vercel.app/stock?symbol="+ticker;
+        // Fallback: try with .NS suffix
+        var url2 = BASE + "/stock?symbol=" + ticker + ".NS&res=num";
         return fetch(url2)
           .then(function(r){ return r.json(); })
           .then(function(data){
-            var d = data.data || data;
-            var price = d.last_price || d.lastPrice || d.currentPrice;
-            var chg = d.percent_change || d.pChange || d.percentChange || null;
-            if(!price) throw new Error("no price");
-            return {ticker:ticker, res:{price:parseFloat(price), dayChangePct:chg?parseFloat(parseFloat(chg).toFixed(2)):null}};
+            if(data.status !== "success" || !data.data) throw new Error("no data");
+            var d = data.data;
+            return {ticker:ticker, res:{
+              price: parseFloat(d.last_price),
+              dayChangePct: d.percent_change != null ? parseFloat(parseFloat(d.percent_change).toFixed(2)) : null
+            }};
           })
           .catch(function(){ return {ticker:ticker, res:null}; });
       });
@@ -215,8 +215,6 @@ function fetchStockHistory(ticker, range){
   var imap = {"1W":"15m","1M":"1d","3M":"1d","6M":"1d","1Y":"1wk","3Y":"1mo"};
   var pmap = {"1W":"5d","1M":"1mo","3M":"3mo","6M":"6mo","1Y":"1y","3Y":"3y"};
   var yTicker = TICKER_MAP[ticker] || ticker+".NS";
-
-  // Use Yahoo Finance v8 via corsproxy for historical charts
   var chartUrl = "https://query1.finance.yahoo.com/v8/finance/chart/"+yTicker+"?interval="+imap[range]+"&range="+pmap[range];
   var proxiedUrl = "https://corsproxy.io/?url="+encodeURIComponent(chartUrl);
 
